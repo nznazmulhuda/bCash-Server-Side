@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
+const bcrypt = require("bcryptjs");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 
 // app and port set
@@ -22,7 +23,21 @@ app.use(express.json());
 // routes
 async function run() {
     try {
-        // All routes is available
+        // All collection is here
+        const UserDB = client.db("bCash").collection("users");
+
+        // Route: 1 / Register
+        app.post("/register", async (req, res) => {
+            const data = req.body;
+            const hashedPassword = await bcrypt.hash(data.pin, 10);
+            data.pin = hashedPassword;
+            data.accountActive = false;
+            data.totalMoney = 0;
+            data.accountBlock = false;
+            data.transactionHistory = [];
+            const result = await UserDB.insertOne(data);
+            res.send(result);
+        });
 
         // TESTING
         await client.connect();
@@ -33,7 +48,7 @@ async function run() {
         );
     } finally {
         // Ensures that the client will close when you finish/error
-        await client.close();
+        // await client.close();
     }
 }
 run().catch(console.dir);
