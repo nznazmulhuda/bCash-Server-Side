@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 
 // app and port set
@@ -11,14 +13,44 @@ const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}
 const client = new MongoClient(uri, {
     serverApi: {
         version: ServerApiVersion.v1,
-        strict: true,
+        strict: false,
         deprecationErrors: true,
     },
 });
 
+// Cookie options
+const cookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+};
+
 // middlware
-app.use(cors());
+app.use(
+    cors({
+        origin: ["http://localhost:4000"],
+        credentials: true,
+    }),
+);
+app.use(cookieParser());
 app.use(express.json());
+
+// This middleware will check if the user is logged in and has the correct account status
+// If not, it will respond with an error message
+const verifyToken = async (req, res, next) => {
+    const token = req.cookies?.token;
+    if (!token) {
+        return res.status(401).send({ message: "unauthorized access" });
+    }
+
+    jwt.verify(token, process.env.SECRET_KEY, (err, decoded) => {
+        if (err) {
+            return res.status(401).send({ message: "unauthorized access" });
+        }
+        req.user = decoded;
+        next();
+    });
+};
 
 // routes
 async function run() {
@@ -37,6 +69,46 @@ async function run() {
             data.transactionHistory = [];
             const result = await UserDB.insertOne(data);
             res.send(result);
+        });
+
+        // Route: 2 / Login
+        app.post("/login", async (req, res) => {
+            const data = req.body;
+            const user = await UserDB.findOne(
+                { email: data.numOrMail } || { number: data.numOrMail },
+            );
+
+            if (user) {
+                const match = await bcrypt.compare(data.pin, user.pin);
+                // check the pin matches the user pic
+                if (match && user.accountActive && !user.accountBlock) {
+                    // Generate JWT token with 1 hour expiration
+                    const token = jwt.sign(
+                        { email: user.email },
+                        process.env.SECRET_KEY,
+                        { expiresIn: "1h" },
+                    );
+
+                    // Set the cookie with the token
+                    res.cookie("token", token, cookieOptions).send(user);
+                } else if (match && !user.accountActive && !user.accountBlock) {
+                    res.status(404).send({
+                        message: "Your account is not activated!",
+                    });
+                } else if (match && user.accountActive && user.accountBlock) {
+                    res.status(404).send({
+                        message: "Your account is blocked!",
+                    });
+                } else if (match && !user.accountActive && user.accountBlock) {
+                    res.status(404).send({
+                        message: "Your account is blocked!",
+                    });
+                } else {
+                    res.status(404).send({ message: "Invalid user details!" });
+                }
+            } else {
+                res.status(404).send({ message: "User not found!" });
+            }
         });
 
         // TESTING
