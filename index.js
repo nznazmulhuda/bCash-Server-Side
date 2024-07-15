@@ -74,9 +74,9 @@ async function run() {
         // Route: 2 / Login
         app.post("/login", async (req, res) => {
             const data = req.body;
-            const user = await UserDB.findOne(
-                { email: data.numOrMail } || { number: data.numOrMail },
-            );
+            const user = await UserDB.findOne({
+                $or: [{ email: data.numOrMail }, { number: data.numOrMail }],
+            });
 
             if (user) {
                 const match = await bcrypt.compare(data.pin, user.pin);
