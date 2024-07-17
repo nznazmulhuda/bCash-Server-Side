@@ -153,6 +153,20 @@ async function run() {
             }
         });
 
+        // Route: 5 / get all transiction data
+        app.post("/transiction", async (req, res) => {
+            const data = req.body;
+            const Transictions = await TransictionDB.find({
+                $or: [
+                    { senderMail: data.email },
+                    { senderNumber: data.number },
+                    { recNumOrMail: data.email },
+                    { recNumOrMail: data.number },
+                ],
+            }).toArray();
+            res.send(Transictions.reverse());
+        });
+
         // TESTING
         await client.connect();
         // Send a ping to confirm a successful connection
