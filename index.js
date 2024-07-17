@@ -9,7 +9,8 @@ const { MongoClient, ServerApiVersion } = require("mongodb");
 // app and port set
 const app = express();
 const port = process.env.PORT || 5000;
-const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@cluster0.pbmq8lu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+// const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@cluster0.pbmq8lu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+const uri = `mongodb://localhost:27017/`;
 const client = new MongoClient(uri, {
     serverApi: {
         version: ServerApiVersion.v1,
@@ -57,6 +58,7 @@ async function run() {
     try {
         // All collection is here
         const UserDB = client.db("bCash").collection("users");
+        const TransictionDB = client.db("bCash").collection("transiction");
 
         // Route: 1 / Register
         app.post("/register", async (req, res) => {
@@ -108,6 +110,46 @@ async function run() {
                 }
             } else {
                 res.status(404).send({ message: "User not found!" });
+            }
+        });
+
+        // Route: 3 / Pin validate
+        app.post("/pinValidate", async (req, res) => {
+            const data = req.body;
+            const user = await UserDB.findOne({
+                $or: [
+                    { email: data.senderMail },
+                    { number: data.senderNumber },
+                ],
+            });
+
+            if (user) {
+                const match = await bcrypt.compare(data.pin, user.pin);
+                if (match) {
+                    res.send({ success: true, message: "Pin Matched!" });
+                } else {
+                    res.send({ success: false, message: "Pin not matched!" });
+                }
+            } else {
+                res.send({ message: "Invalid User!" });
+            }
+        });
+
+        // Route: 4 / send money
+        app.post("/sendMoney", async (req, res) => {
+            const data = req.body;
+            const user = await UserDB.findOne({
+                $or: [
+                    { email: data.recNumOrMail },
+                    { number: data.recNumOrMail },
+                ],
+            });
+
+            if (user) {
+                const result = await TransictionDB.insertOne(data);
+                return res.send(result);
+            } else {
+                res.status(404).send({ message: "Invalid user!" });
             }
         });
 
